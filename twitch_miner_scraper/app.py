@@ -20,6 +20,19 @@ from .http import build_session
 LOG = logging.getLogger(__name__)
 
 
+def _verify_output_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    probe = path / ".tcpms-write-test"
+    try:
+        probe.write_text("", encoding="utf-8")
+        probe.unlink()
+    except OSError as error:
+        raise OSError(
+            f"output directory is not writable: {path}; ensure the mounted "
+            "volume is writable by container UID 10001"
+        ) from error
+
+
 def _write_snapshot(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -31,6 +44,7 @@ class Application:
     def __init__(self, settings: Settings, upload=True):
         self.settings, self.upload = settings, upload
         self.session = build_session()
+        _verify_output_dir(self.settings.output_dir)
 
     def run_job(self, job: str) -> dict:
         self.settings.validate_job(job, self.upload)

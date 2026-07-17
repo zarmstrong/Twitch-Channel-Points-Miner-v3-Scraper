@@ -14,7 +14,6 @@ RUN pip install --no-cache-dir --no-deps . \
     && mkdir -p /data \
     && chown scraper:scraper /data
 
-USER scraper
 VOLUME ["/data"]
-ENTRYPOINT ["twitch-miner-scraper"]
-CMD ["serve"]
+ENTRYPOINT ["python", "-m", "twitch_miner_scraper.container_entrypoint"]
+CMD ["twitch-miner-scraper", "serve"]

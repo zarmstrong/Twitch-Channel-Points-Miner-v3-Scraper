@@ -9,7 +9,30 @@ Each successful job first writes an atomic snapshot under `/data`, then updates 
 
 ## Configuration
 
-Copy `.env.example` to `.env` and set:
+The easiest setup is the interactive configuration wizard. It uses only the
+Python standard library, hides secrets while they are entered, verifies the
+Twitch credentials and existing Gists, and writes `.env` with owner-only
+permissions:
+
+```bash
+python3 tools/configure.py
+```
+
+To configure or rotate only one provider while preserving all other variables
+in an existing `.env`, use:
+
+```bash
+python3 tools/configure.py --github-only
+python3 tools/configure.py --twitch-only
+```
+
+The wizard cannot register accounts or applications for you. It prints the
+official Twitch application and GitHub token pages, then asks for the issued
+credentials. It requests a temporary Twitch app token only to verify the
+Client ID and secret; the token is discarded and the running service manages
+its own cached token.
+
+For manual setup, copy `.env.example` to `.env` and set:
 
 - `TCPMS_GITHUB_TOKEN`: a GitHub token allowed to update both Gists;
 - `TCPMS_DROPS_GIST_ID` and `TCPMS_BADGES_GIST_ID`: existing Gist IDs;
@@ -96,6 +119,12 @@ The Compose file is intentionally deployment-local so operators can adjust
 container names, networks, labels, and volume configuration without changing
 the application repository.
 
+The image starts briefly as root to initialize the mounted output directory,
+then runs the scraper as UID/GID `10001`. This makes fresh named volumes and
+bind mounts writable without leaving the scraper process running as root. If
+Compose specifies `user:`, remove that override or ensure the selected user can
+write `/data`.
+
 ## Run continuously
 
 The standard container starts both schedules immediately and stores the latest
@@ -170,4 +199,27 @@ Both documents have `version`, `generated_at`, `source`, and `counts` fields. Dr
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m pytest
+```
+
+## Troubleshooting
+
+`output directory is not writable` means the container cannot initialize the
+mounted `/data` path. Do not set a read-only volume or a Compose `user:`
+override. Recreate the container after correcting the mount; existing catalog
+files are retained.
+
+`missing required configuration: TCPMS_TWITCH_CLIENT_ID` means the Twitch
+credentials were not loaded. Confirm that `.env` is beside `compose.yaml` and
+contains the prefixed names:
+
+```dotenv
+TCPMS_TWITCH_CLIENT_ID=your_client_id
+TCPMS_TWITCH_CLIENT_SECRET=your_client_secret
+```
+
+Then recreate rather than merely restart the container so Compose applies the
+updated environment:
+
+```bash
+docker compose up -d --force-recreate
 ```
