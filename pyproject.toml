@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "twitch-miner-scraper"
+version = "0.1.0"
+description = "Scheduled Twitch Drops and global badge catalog publisher"
+requires-python = ">=3.11"
+dependencies = ["requests>=2.31,<3"]
+
+[project.scripts]
+twitch-miner-scraper = "twitch_miner_scraper.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["twitch_miner_scraper*"]
