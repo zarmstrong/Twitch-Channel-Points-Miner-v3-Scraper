@@ -169,16 +169,44 @@ class DropsScraper:
     def __init__(self, session: requests.Session, timeout=30, request_delay=0.25):
         self.session, self.timeout, self.request_delay = session, timeout, request_delay
 
-    def scrape(self) -> dict:
+    def scrape(self, previous: dict | None = None) -> dict:
         LOG.debug("Requesting TwitchDrops.app index from %s", HOME_URL)
         response = self.session.get(HOME_URL, headers={"Accept": "text/html"}, timeout=self.timeout)
         response.raise_for_status()
         indexed = parse_front_page(response.text)
         LOG.info("TwitchDrops.app index contains %d active/upcoming games", len(indexed))
+        previous = previous if isinstance(previous, dict) else {}
+        previous_index = {
+            game.get("slug"): game
+            for game in previous.get("indexed_games", [])
+            if isinstance(game, dict) and game.get("slug")
+        }
+        previous_reports = {
+            report.get("source"): report
+            for report in previous.get("games", [])
+            if isinstance(report, dict) and report.get("source")
+        }
         reports = []
+        fetched = 0
+        reused = 0
         for index, game in enumerate(indexed):
+            prior_game = previous_index.get(game.get("slug"))
+            prior_report = previous_reports.get(game.get("url"))
+            if prior_game == game and prior_report is not None:
+                reports.append(prior_report)
+                reused += 1
+                LOG.debug(
+                    "Reusing unchanged game %d/%d: slug=%s",
+                    index + 1,
+                    len(indexed),
+                    game.get("slug"),
+                )
+                continue
+            if fetched and self.request_delay:
+                LOG.debug("Waiting %ss before the next game request", self.request_delay)
+                time.sleep(self.request_delay)
             LOG.debug(
-                "Scraping game %d/%d: slug=%s url=%s",
+                "Scraping new/changed game %d/%d: slug=%s url=%s",
                 index + 1,
                 len(indexed),
                 game.get("slug"),
@@ -188,6 +216,7 @@ class DropsScraper:
             response.raise_for_status()
             report = parse_game_page(response.text, game["url"])
             reports.append(report)
+            fetched += 1
             LOG.debug(
                 "Parsed %s: campaigns=%d upcoming=%d drops=%d",
                 report.get("game"),
@@ -195,9 +224,13 @@ class DropsScraper:
                 len(report["upcoming_campaigns"]),
                 len(report["drops"]),
             )
-            if self.request_delay and index + 1 < len(indexed):
-                LOG.debug("Waiting %ss before the next game request", self.request_delay)
-                time.sleep(self.request_delay)
+        removed = len(set(previous_index) - {game.get("slug") for game in indexed})
+        LOG.info(
+            "Drops refresh complete: fetched=%d reused=%d removed=%d",
+            fetched,
+            reused,
+            removed,
+        )
         return {
             "version": 1,
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -206,6 +239,11 @@ class DropsScraper:
                 "games": len(reports),
                 "campaigns": sum(len(x["campaigns"]) + len(x["upcoming_campaigns"]) for x in reports),
                 "drops": sum(len(x["drops"]) for x in reports),
+            },
+            "scrape_stats": {
+                "fetched_games": fetched,
+                "reused_games": reused,
+                "removed_games": removed,
             },
             "indexed_games": indexed,
             "games": reports,

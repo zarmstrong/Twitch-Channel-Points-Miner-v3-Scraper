@@ -50,6 +50,21 @@ def _write_snapshot(path: Path, data: dict) -> None:
     LOG.debug("Snapshot replaced atomically: %s", path)
 
 
+def _load_snapshot(path: Path) -> dict | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        LOG.debug("No previous snapshot at %s; a full scrape is required", path)
+        return None
+    except (OSError, json.JSONDecodeError) as error:
+        LOG.warning("Unable to load previous snapshot %s: %s", path, error)
+        return None
+    if not isinstance(data, dict) or data.get("version") != 1:
+        LOG.warning("Ignoring incompatible previous snapshot at %s", path)
+        return None
+    return data
+
+
 class Application:
     def __init__(self, settings: Settings, upload=True):
         self.settings, self.upload = settings, upload
@@ -69,7 +84,13 @@ class Application:
         self.settings.validate_job(job, self.upload)
         LOG.info("Starting %s scrape", job)
         if job == "drops":
-            data = DropsScraper(self.session, self.settings.request_timeout, self.settings.request_delay).scrape()
+            snapshot_path = self.settings.output_dir / self.settings.drops_gist_filename
+            previous = _load_snapshot(snapshot_path)
+            data = DropsScraper(
+                self.session,
+                self.settings.request_timeout,
+                self.settings.request_delay,
+            ).scrape(previous=previous)
             gist_id, filename = self.settings.drops_gist_id, self.settings.drops_gist_filename
         elif job == "badges":
             token = self.settings.twitch_oauth_token

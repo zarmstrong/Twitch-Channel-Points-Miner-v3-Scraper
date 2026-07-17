@@ -7,6 +7,13 @@ A small container service that publishes two machine-readable JSON catalogs:
 
 Each successful job first writes an atomic snapshot under `/data`, then updates its configured GitHub Gist. Failed jobs are logged and leave the prior snapshot and Gist intact. The two schedules are independent and run immediately when the container starts.
 
+On each Drops run, the scraper always fetches the TwitchDrops.app front page,
+then compares every indexed game object with the previous local JSON snapshot.
+Unchanged games reuse their stored per-game reports; only new games, changed
+front-page objects, or games missing a stored report trigger game-page
+requests. Games removed from the front page are removed from the next catalog.
+The `scrape_stats` object reports fetched, reused, and removed game counts.
+
 ## Configuration
 
 The easiest setup is the interactive configuration wizard. It uses only the
