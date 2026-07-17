@@ -17,6 +17,7 @@ def test_defaults_and_job_validation(monkeypatch, tmp_path):
     settings = Settings.from_env()
     assert settings.drops_interval == 900
     assert settings.badges_interval == 1200
+    assert settings.log_level == "INFO"
     settings.validate_job("drops", upload=False)
     with pytest.raises(ValueError, match="TCPMS_TWITCH_CLIENT_ID"):
         settings.validate_job("badges", upload=False)
@@ -32,4 +33,12 @@ def test_badges_accept_client_credentials(monkeypatch):
 def test_invalid_interval(monkeypatch):
     monkeypatch.setenv("TCPMS_DROPS_INTERVAL_SECONDS", "0")
     with pytest.raises(ValueError, match="greater than zero"):
+        Settings.from_env()
+
+
+def test_log_level_is_normalized_and_validated(monkeypatch):
+    monkeypatch.setenv("TCPMS_LOG_LEVEL", "debug")
+    assert Settings.from_env().log_level == "DEBUG"
+    monkeypatch.setenv("TCPMS_LOG_LEVEL", "verbose")
+    with pytest.raises(ValueError, match="TCPMS_LOG_LEVEL"):
         Settings.from_env()

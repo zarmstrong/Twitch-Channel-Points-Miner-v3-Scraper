@@ -57,6 +57,7 @@ This repository contains the containerized data-publishing service for Twitch Ch
 - Keep `serve` as the image default while allowing command overrides for one-off runs.
 - Avoid adding OS packages or Python dependencies unless they are required at runtime.
 - Keep logs on stdout/stderr for container log collection; do not add rotating log files inside the image.
+- Keep `INFO` useful for operators and put request progress and internal decisions at `DEBUG`; never log tokens, secrets, cookies, or authorization headers.
 
 ## Validation
 

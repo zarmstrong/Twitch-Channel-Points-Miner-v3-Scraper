@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import logging
 import re
 import time
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from urllib.parse import urlparse
 import requests
 
 HOME_URL = "https://twitchdrops.app/"
+LOG = logging.getLogger(__name__)
 
 
 def _clean(value: str | None) -> str | None:
@@ -168,15 +170,33 @@ class DropsScraper:
         self.session, self.timeout, self.request_delay = session, timeout, request_delay
 
     def scrape(self) -> dict:
+        LOG.debug("Requesting TwitchDrops.app index from %s", HOME_URL)
         response = self.session.get(HOME_URL, headers={"Accept": "text/html"}, timeout=self.timeout)
         response.raise_for_status()
         indexed = parse_front_page(response.text)
+        LOG.info("TwitchDrops.app index contains %d active/upcoming games", len(indexed))
         reports = []
         for index, game in enumerate(indexed):
+            LOG.debug(
+                "Scraping game %d/%d: slug=%s url=%s",
+                index + 1,
+                len(indexed),
+                game.get("slug"),
+                game.get("url"),
+            )
             response = self.session.get(game["url"], headers={"Accept": "text/html"}, timeout=self.timeout)
             response.raise_for_status()
-            reports.append(parse_game_page(response.text, game["url"]))
+            report = parse_game_page(response.text, game["url"])
+            reports.append(report)
+            LOG.debug(
+                "Parsed %s: campaigns=%d upcoming=%d drops=%d",
+                report.get("game"),
+                len(report["campaigns"]),
+                len(report["upcoming_campaigns"]),
+                len(report["drops"]),
+            )
             if self.request_delay and index + 1 < len(indexed):
+                LOG.debug("Waiting %ss before the next game request", self.request_delay)
                 time.sleep(self.request_delay)
         return {
             "version": 1,

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import requests
+
+LOG = logging.getLogger(__name__)
 
 
 class GistPublisher:
@@ -14,6 +17,13 @@ class GistPublisher:
         self.timeout = timeout
 
     def publish(self, gist_id: str, filename: str, data: dict) -> None:
+        content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+        LOG.debug(
+            "Updating Gist %s file %s with %d UTF-8 bytes",
+            gist_id,
+            filename,
+            len(content.encode("utf-8")),
+        )
         response = self.session.patch(
             f"https://api.github.com/gists/{gist_id}",
             headers={
@@ -24,10 +34,11 @@ class GistPublisher:
             json={
                 "files": {
                     filename: {
-                        "content": json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+                        "content": content
                     }
                 }
             },
             timeout=self.timeout,
         )
         response.raise_for_status()
+        LOG.debug("GitHub accepted update for Gist %s", gist_id)

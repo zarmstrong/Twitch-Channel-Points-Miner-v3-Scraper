@@ -8,6 +8,8 @@ import logging
 from .app import Application
 from .config import Settings
 
+LOG = logging.getLogger(__name__)
+
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description="Scrape Twitch Drops and badge catalogs into GitHub Gists")
@@ -18,9 +20,19 @@ def parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = parser().parse_args(argv)
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
-        app = Application(Settings.from_env(), upload=not args.no_upload)
+        settings = Settings.from_env()
+        logging.basicConfig(
+            level=getattr(logging, settings.log_level),
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
+        LOG.debug(
+            "Configuration loaded: command=%s upload=%s output_dir=%s",
+            args.command,
+            not args.no_upload,
+            settings.output_dir,
+        )
+        app = Application(settings, upload=not args.no_upload)
         if args.command == "serve":
             app.serve()
             return 0
@@ -29,7 +41,12 @@ def main(argv=None) -> int:
         app.run_job(args.command)
         return 0
     except (ValueError, OSError) as error:
-        logging.error("%s", error)
+        if not logging.getLogger().handlers:
+            logging.basicConfig(
+                level=logging.ERROR,
+                format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+            )
+        LOG.error("%s", error)
         return 2
 
 

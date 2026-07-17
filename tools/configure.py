@@ -188,6 +188,7 @@ def main(argv=None) -> int:
             {
                 "TCPMS_DROPS_INTERVAL_SECONDS": "900",
                 "TCPMS_BADGES_INTERVAL_SECONDS": "1200",
+                "TCPMS_LOG_LEVEL": "INFO",
             }
         )
         write_env(args.output, values)

@@ -44,6 +44,12 @@ service updates `twitch-drops.json` and `twitch-badges.json` by default;
 filenames and intervals can be changed with the optional variables documented
 in `.env.example`. Do not commit `.env`.
 
+Logging defaults to `INFO`. Set `TCPMS_LOG_LEVEL` to `DEBUG`, `INFO`,
+`WARNING`, `ERROR`, or `CRITICAL`. `DEBUG` includes scheduler decisions,
+per-source request progress, parsed record counts, token-cache decisions,
+snapshot sizes, and Gist update progress. Credentials and authorization headers
+are never logged.
+
 The automatically obtained Twitch token is stored as
 `/data/twitch-app-token.json` with owner-only permissions. The scraper reuses it
 until five minutes before expiry, then obtains and stores a replacement. Set

@@ -6,6 +6,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
 
 def _positive_float(name: str, default: str) -> float:
     try:
@@ -32,12 +34,18 @@ class Settings:
     request_delay: float
     request_timeout: float
     output_dir: Path
+    log_level: str
 
     @classmethod
     def from_env(cls) -> "Settings":
         delay = float(os.getenv("TCPMS_REQUEST_DELAY_SECONDS", "0.25"))
         if delay < 0:
             raise ValueError("TCPMS_REQUEST_DELAY_SECONDS cannot be negative")
+        log_level = os.getenv("TCPMS_LOG_LEVEL", "INFO").strip().upper()
+        if log_level not in LOG_LEVELS:
+            raise ValueError(
+                "TCPMS_LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR, or CRITICAL"
+            )
         return cls(
             github_token=os.getenv("TCPMS_GITHUB_TOKEN"),
             drops_gist_id=os.getenv("TCPMS_DROPS_GIST_ID"),
@@ -56,6 +64,7 @@ class Settings:
             request_delay=delay,
             request_timeout=_positive_float("TCPMS_REQUEST_TIMEOUT_SECONDS", "30"),
             output_dir=Path(os.getenv("TCPMS_OUTPUT_DIR", "/data")),
+            log_level=log_level,
         )
 
     def validate_job(self, job: str, upload: bool = True) -> None:

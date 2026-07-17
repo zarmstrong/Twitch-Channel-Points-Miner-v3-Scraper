@@ -21,11 +21,13 @@ LOG = logging.getLogger(__name__)
 
 
 def _verify_output_dir(path: Path) -> None:
+    LOG.debug("Verifying output directory %s", path)
     path.mkdir(parents=True, exist_ok=True)
     probe = path / ".tcpms-write-test"
     try:
         probe.write_text("", encoding="utf-8")
         probe.unlink()
+        LOG.debug("Output directory is writable: %s", path)
     except OSError as error:
         raise OSError(
             f"output directory is not writable: {path}; ensure the mounted "
@@ -36,8 +38,16 @@ def _verify_output_dir(path: Path) -> None:
 def _write_snapshot(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    LOG.debug(
+        "Writing snapshot %s via %s (%d UTF-8 bytes)",
+        path,
+        temporary,
+        len(content.encode("utf-8")),
+    )
+    temporary.write_text(content, encoding="utf-8")
     os.replace(temporary, path)
+    LOG.debug("Snapshot replaced atomically: %s", path)
 
 
 class Application:
@@ -45,6 +55,15 @@ class Application:
         self.settings, self.upload = settings, upload
         self.session = build_session()
         _verify_output_dir(self.settings.output_dir)
+        LOG.debug(
+            "Application initialized: upload=%s drops_interval=%ss "
+            "badges_interval=%ss timeout=%ss request_delay=%ss",
+            self.upload,
+            self.settings.drops_interval,
+            self.settings.badges_interval,
+            self.settings.request_timeout,
+            self.settings.request_delay,
+        )
 
     def run_job(self, job: str) -> dict:
         self.settings.validate_job(job, self.upload)
@@ -55,6 +74,7 @@ class Application:
         elif job == "badges":
             token = self.settings.twitch_oauth_token
             if not token:
+                LOG.debug("No static Twitch token configured; using token manager")
                 token = TwitchTokenManager(
                     self.session,
                     self.settings.twitch_client_id,
@@ -62,6 +82,8 @@ class Application:
                     self.settings.output_dir / TOKEN_CACHE_FILENAME,
                     self.settings.request_timeout,
                 ).get_token()
+            else:
+                LOG.debug("Using statically configured Twitch OAuth token")
             data = BadgeScraper(
                 self.session,
                 self.settings.twitch_client_id,
@@ -105,6 +127,10 @@ class Application:
                 except Exception:
                     LOG.exception("%s scrape failed; retaining the previous snapshot/Gist", job)
                 deadlines[job] = time.monotonic() + intervals[job]
+                LOG.debug(
+                    "Next %s scrape scheduled in %ss", job, intervals[job]
+                )
             wait = max(0.0, min(deadlines.values()) - time.monotonic())
+            LOG.debug("Scheduler waiting up to %.1fs", min(wait, 60.0))
             stop.wait(min(wait, 60.0))
         LOG.info("Scheduler stopped")
