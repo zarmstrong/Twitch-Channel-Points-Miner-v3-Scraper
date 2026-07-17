@@ -45,10 +45,11 @@ This repository contains the containerized data-publishing service for Twitch Ch
 ## Configuration and secrets
 
 - All deployment-specific values belong in environment variables.
-- Never commit GitHub tokens, Twitch OAuth tokens, client IDs tied to private deployments, Gist IDs, cookies, or captured authenticated responses.
+- Never commit GitHub tokens, Twitch client secrets, OAuth tokens, client IDs tied to private deployments, Gist IDs, cookies, or captured authenticated responses.
 - Keep `.env` ignored and use placeholder values in `.env.example` and documentation.
 - Validate only the credentials needed by the selected job. Drops dry runs must not require Twitch or GitHub credentials.
 - GitHub Gists must already exist; the service updates them but does not create or delete them.
+- When no static Twitch token is configured, preserve automatic app-token refresh and the owner-only token cache under `/data`.
 
 ## Container conventions
 

@@ -10,6 +10,7 @@ import threading
 import time
 from pathlib import Path
 
+from .auth import TOKEN_CACHE_FILENAME, TwitchTokenManager
 from .badges import BadgeScraper
 from .config import Settings
 from .drops import DropsScraper
@@ -38,7 +39,21 @@ class Application:
             data = DropsScraper(self.session, self.settings.request_timeout, self.settings.request_delay).scrape()
             gist_id, filename = self.settings.drops_gist_id, self.settings.drops_gist_filename
         elif job == "badges":
-            data = BadgeScraper(self.session, self.settings.twitch_client_id, self.settings.twitch_oauth_token, self.settings.request_timeout).scrape()
+            token = self.settings.twitch_oauth_token
+            if not token:
+                token = TwitchTokenManager(
+                    self.session,
+                    self.settings.twitch_client_id,
+                    self.settings.twitch_client_secret,
+                    self.settings.output_dir / TOKEN_CACHE_FILENAME,
+                    self.settings.request_timeout,
+                ).get_token()
+            data = BadgeScraper(
+                self.session,
+                self.settings.twitch_client_id,
+                token,
+                self.settings.request_timeout,
+            ).scrape()
             gist_id, filename = self.settings.badges_gist_id, self.settings.badges_gist_filename
         else:
             raise ValueError(f"unknown job: {job}")

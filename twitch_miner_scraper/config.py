@@ -23,6 +23,7 @@ class Settings:
     drops_gist_id: str | None
     badges_gist_id: str | None
     twitch_client_id: str | None
+    twitch_client_secret: str | None
     twitch_oauth_token: str | None
     drops_gist_filename: str
     badges_gist_filename: str
@@ -34,36 +35,43 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        delay = float(os.getenv("REQUEST_DELAY_SECONDS", "0.25"))
+        delay = float(os.getenv("TCPMS_REQUEST_DELAY_SECONDS", "0.25"))
         if delay < 0:
-            raise ValueError("REQUEST_DELAY_SECONDS cannot be negative")
+            raise ValueError("TCPMS_REQUEST_DELAY_SECONDS cannot be negative")
         return cls(
-            github_token=os.getenv("GITHUB_TOKEN"),
-            drops_gist_id=os.getenv("DROPS_GIST_ID"),
-            badges_gist_id=os.getenv("BADGES_GIST_ID"),
-            twitch_client_id=os.getenv("TWITCH_CLIENT_ID"),
-            twitch_oauth_token=os.getenv("TWITCH_OAUTH_TOKEN"),
-            drops_gist_filename=os.getenv("DROPS_GIST_FILENAME", "twitch-drops.json"),
-            badges_gist_filename=os.getenv("BADGES_GIST_FILENAME", "twitch-badges.json"),
-            drops_interval=_positive_float("DROPS_INTERVAL_SECONDS", "900"),
-            badges_interval=_positive_float("BADGES_INTERVAL_SECONDS", "1200"),
+            github_token=os.getenv("TCPMS_GITHUB_TOKEN"),
+            drops_gist_id=os.getenv("TCPMS_DROPS_GIST_ID"),
+            badges_gist_id=os.getenv("TCPMS_BADGES_GIST_ID"),
+            twitch_client_id=os.getenv("TCPMS_TWITCH_CLIENT_ID"),
+            twitch_client_secret=os.getenv("TCPMS_TWITCH_CLIENT_SECRET"),
+            twitch_oauth_token=os.getenv("TCPMS_TWITCH_OAUTH_TOKEN"),
+            drops_gist_filename=os.getenv(
+                "TCPMS_DROPS_GIST_FILENAME", "twitch-drops.json"
+            ),
+            badges_gist_filename=os.getenv(
+                "TCPMS_BADGES_GIST_FILENAME", "twitch-badges.json"
+            ),
+            drops_interval=_positive_float("TCPMS_DROPS_INTERVAL_SECONDS", "900"),
+            badges_interval=_positive_float("TCPMS_BADGES_INTERVAL_SECONDS", "1200"),
             request_delay=delay,
-            request_timeout=_positive_float("REQUEST_TIMEOUT_SECONDS", "30"),
-            output_dir=Path(os.getenv("OUTPUT_DIR", "/data")),
+            request_timeout=_positive_float("TCPMS_REQUEST_TIMEOUT_SECONDS", "30"),
+            output_dir=Path(os.getenv("TCPMS_OUTPUT_DIR", "/data")),
         )
 
     def validate_job(self, job: str, upload: bool = True) -> None:
         missing = []
         if job == "badges":
             if not self.twitch_client_id:
-                missing.append("TWITCH_CLIENT_ID")
-            if not self.twitch_oauth_token:
-                missing.append("TWITCH_OAUTH_TOKEN")
+                missing.append("TCPMS_TWITCH_CLIENT_ID")
+            if not self.twitch_oauth_token and not self.twitch_client_secret:
+                missing.append(
+                    "TCPMS_TWITCH_CLIENT_SECRET (or TCPMS_TWITCH_OAUTH_TOKEN)"
+                )
         if upload:
             if not self.github_token:
-                missing.append("GITHUB_TOKEN")
+                missing.append("TCPMS_GITHUB_TOKEN")
             gist_id = self.drops_gist_id if job == "drops" else self.badges_gist_id
             if not gist_id:
-                missing.append(f"{job.upper()}_GIST_ID")
+                missing.append(f"TCPMS_{job.upper()}_GIST_ID")
         if missing:
             raise ValueError("missing required configuration: " + ", ".join(missing))

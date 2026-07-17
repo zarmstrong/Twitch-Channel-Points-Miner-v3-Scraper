@@ -11,17 +11,90 @@ Each successful job first writes an atomic snapshot under `/data`, then updates 
 
 Copy `.env.example` to `.env` and set:
 
-- `GITHUB_TOKEN`: a GitHub token allowed to update both Gists;
-- `DROPS_GIST_ID` and `BADGES_GIST_ID`: existing Gist IDs;
-- `TWITCH_CLIENT_ID` and `TWITCH_OAUTH_TOKEN`: credentials accepted by the Twitch Helix API.
+- `TCPMS_GITHUB_TOKEN`: a GitHub token allowed to update both Gists;
+- `TCPMS_DROPS_GIST_ID` and `TCPMS_BADGES_GIST_ID`: existing Gist IDs;
+- `TCPMS_TWITCH_CLIENT_ID` and `TCPMS_TWITCH_CLIENT_SECRET`: Twitch application credentials used to obtain an app access token automatically.
 
-The Gists must already exist. The service updates `twitch-drops.json` and `twitch-badges.json` by default; filenames and intervals can be changed with the optional variables documented in `.env.example`. Do not commit `.env`.
+Every application variable uses the `TCPMS_` prefix to avoid collisions with
+other containers on the same Docker host. The Gists must already exist. The
+service updates `twitch-drops.json` and `twitch-badges.json` by default;
+filenames and intervals can be changed with the optional variables documented
+in `.env.example`. Do not commit `.env`.
+
+The automatically obtained Twitch token is stored as
+`/data/twitch-app-token.json` with owner-only permissions. The scraper reuses it
+until five minutes before expiry, then obtains and stores a replacement. Set
+`TCPMS_TWITCH_OAUTH_TOKEN` only if you prefer to provide and renew a token
+yourself; when set, it takes precedence and is not written to disk.
+
+### GitHub token permissions
+
+The recommended credential is a fine-grained personal access token owned by
+the same GitHub account that owns the configured Gists. It needs only:
+
+- **User permissions → Gists: Read and write**
+
+No repository or organization permissions are required. The scraper uses the
+token only to call GitHub's `PATCH /gists/{gist_id}` endpoint for the two
+existing Gists; it does not create or delete Gists.
+
+If you use a personal access token (classic), grant only the `gist` scope.
+Configure either token type as `TCPMS_GITHUB_TOKEN`, give it an appropriate
+expiration date, and rotate it before it expires. See GitHub's
+[Gist endpoint permissions](https://docs.github.com/en/rest/gists/gists#update-a-gist)
+for the current requirements.
 
 ## Build the image
 
 ```bash
 docker build -t twitch-miner-scraper .
 ```
+
+## Docker Compose
+
+If you prefer Docker Compose, create a local `compose.yaml` beside the
+Dockerfile with the following contents:
+
+```yaml
+services:
+  scraper:
+    build: .
+    image: twitch-miner-scraper
+    container_name: twitch-miner-scraper
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - scraper-data:/data
+
+volumes:
+  scraper-data:
+```
+
+Build and start the scheduled service, then follow its logs:
+
+```bash
+docker compose up -d --build
+docker compose logs -f scraper
+```
+
+Run both jobs once, or run one source independently:
+
+```bash
+docker compose run --rm scraper run
+docker compose run --rm scraper drops
+docker compose run --rm scraper badges
+```
+
+Stop the service without deleting its persistent data volume:
+
+```bash
+docker compose down
+```
+
+The Compose file is intentionally deployment-local so operators can adjust
+container names, networks, labels, and volume configuration without changing
+the application repository.
 
 ## Run continuously
 

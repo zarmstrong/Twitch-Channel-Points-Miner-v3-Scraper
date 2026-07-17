@@ -16,7 +16,7 @@ def build_session(user_agent: str = "TwitchMinerScraper/0.1") -> requests.Sessio
         status=3,
         backoff_factor=0.5,
         status_forcelist=(429, 500, 502, 503, 504),
-        allowed_methods=frozenset({"GET", "PATCH"}),
+        allowed_methods=frozenset({"GET", "PATCH", "POST"}),
         respect_retry_after_header=True,
     )
     session.mount("https://", HTTPAdapter(max_retries=retries))
