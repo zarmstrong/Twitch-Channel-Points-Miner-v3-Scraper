@@ -67,22 +67,42 @@ def _load_snapshot(path: Path) -> dict | None:
     return data
 
 
-def _record_success(path: Path, job: str, event: str) -> None:
-    """Atomically record a successful scrape or upload for one job."""
+def _record_success(path: Path, job: str, event: str) -> bool:
+    """Best-effort recording of a successful scrape or upload for one job."""
+    if event not in {"scrape", "upload"}:
+        raise ValueError(f"unknown success event: {event}")
     try:
         monitor = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, OSError, json.JSONDecodeError):
-        monitor = {}
-    if not isinstance(monitor, dict) or monitor.get("version") != 1:
+    except FileNotFoundError:
         monitor = {"version": 1, "jobs": {}}
-    jobs = monitor.setdefault("jobs", {})
-    if not isinstance(jobs, dict):
+    except OSError as error:
+        LOG.warning("Unable to read monitor file %s: %s", path, error)
+        return False
+    except json.JSONDecodeError as error:
+        LOG.warning("Unable to parse monitor file %s: %s", path, error)
+        return False
+    if not isinstance(monitor, dict) or monitor.get("version") != 1:
+        LOG.warning("Refusing to replace incompatible monitor file at %s", path)
+        return False
+    jobs = monitor.get("jobs")
+    if jobs is None:
         jobs = monitor["jobs"] = {}
-    status = jobs.setdefault(job, {})
-    if not isinstance(status, dict):
+    if not isinstance(jobs, dict):
+        LOG.warning("Refusing to replace malformed monitor file at %s", path)
+        return False
+    status = jobs.get(job)
+    if status is None:
         status = jobs[job] = {}
+    if not isinstance(status, dict):
+        LOG.warning("Refusing to replace malformed %s monitor status", job)
+        return False
     status[f"last_successful_{event}_at"] = datetime.now(timezone.utc).isoformat()
-    _write_snapshot(path, monitor)
+    try:
+        _write_snapshot(path, monitor)
+    except OSError as error:
+        LOG.warning("Unable to update monitor file %s: %s", path, error)
+        return False
+    return True
 
 
 class Application:
@@ -159,7 +179,7 @@ class Application:
                 self.run_job(job)
             except Exception:
                 success = False
-                LOG.exception("%s scrape failed", job)
+                LOG.exception("%s job failed", job)
         return success
 
     def serve(self) -> None:
@@ -185,7 +205,8 @@ class Application:
                     self.run_job(job)
                 except Exception:
                     LOG.exception(
-                        "%s scrape failed; retaining the previous snapshot/Gist", job
+                        "%s job failed; local snapshot or Gist may already be updated",
+                        job,
                     )
                 deadlines[job] = time.monotonic() + intervals[job]
                 LOG.debug("Next %s scrape scheduled in %ss", job, intervals[job])

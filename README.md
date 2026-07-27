@@ -5,7 +5,11 @@ A small container service that publishes two machine-readable JSON catalogs:
 - active and upcoming campaigns from [twitchdrops.app](https://twitchdrops.app/), every 15 minutes;
 - Twitch global chat badges from Helix, every 20 minutes.
 
-Each successful job first writes an atomic snapshot under `/data`, then updates its configured GitHub Gist. Failed jobs are logged and leave the prior snapshot and Gist intact. The two schedules are independent and run immediately when the container starts.
+Each successful job first writes an atomic snapshot under `/data`, then updates
+its configured GitHub Gist. A scraping failure leaves the prior snapshot and
+Gist intact. If Gist publishing fails, the new local snapshot remains available
+while the Gist retains its prior content. The two schedules are independent and
+run immediately when the container starts.
 
 The service also maintains `/data/scraper-monitor.json`. It records separate
 UTC ISO 8601 `last_successful_scrape_at` and `last_successful_upload_at`

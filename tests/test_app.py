@@ -43,16 +43,39 @@ def test_record_success_preserves_other_job_and_event_timestamps(tmp_path):
             assert datetime.fromisoformat(timestamp).utcoffset().total_seconds() == 0
 
 
-def test_record_success_replaces_invalid_monitor(tmp_path):
+def test_record_success_does_not_replace_invalid_monitor(tmp_path):
     monitor_path = tmp_path / "scraper-monitor.json"
     monitor_path.write_text("not json", encoding="utf-8")
 
-    _record_success(monitor_path, "drops", "scrape")
+    assert _record_success(monitor_path, "drops", "scrape") is False
 
-    monitor = json.loads(monitor_path.read_text(encoding="utf-8"))
-    assert monitor["version"] == 1
-    assert list(monitor["jobs"]) == ["drops"]
+    assert monitor_path.read_text(encoding="utf-8") == "not json"
     assert not monitor_path.with_suffix(".json.tmp").exists()
+
+
+def test_record_success_does_not_replace_unreadable_monitor(monkeypatch, tmp_path):
+    monitor_path = tmp_path / "scraper-monitor.json"
+
+    def deny_read(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("pathlib.Path.read_text", deny_read)
+
+    assert _record_success(monitor_path, "drops", "scrape") is False
+
+
+def test_record_success_write_failure_does_not_raise(monkeypatch, tmp_path):
+    def deny_write(*args, **kwargs):
+        raise PermissionError("denied")
+
+    monkeypatch.setattr("twitch_miner_scraper.app._write_snapshot", deny_write)
+
+    assert _record_success(tmp_path / "monitor.json", "drops", "scrape") is False
+
+
+def test_record_success_rejects_unknown_event(tmp_path):
+    with pytest.raises(ValueError, match="unknown success event"):
+        _record_success(tmp_path / "monitor.json", "drops", "download")
 
 
 def test_failed_upload_does_not_record_upload_success(monkeypatch, tmp_path):
