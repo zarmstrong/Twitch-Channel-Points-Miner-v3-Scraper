@@ -8,6 +8,7 @@ import os
 import signal
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .auth import TOKEN_CACHE_FILENAME, TwitchTokenManager
@@ -18,6 +19,7 @@ from .gist import GistPublisher
 from .http import build_session
 
 LOG = logging.getLogger(__name__)
+MONITOR_FILENAME = "scraper-monitor.json"
 
 
 def _verify_output_dir(path: Path) -> None:
@@ -65,6 +67,24 @@ def _load_snapshot(path: Path) -> dict | None:
     return data
 
 
+def _record_success(path: Path, job: str, event: str) -> None:
+    """Atomically record a successful scrape or upload for one job."""
+    try:
+        monitor = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        monitor = {}
+    if not isinstance(monitor, dict) or monitor.get("version") != 1:
+        monitor = {"version": 1, "jobs": {}}
+    jobs = monitor.setdefault("jobs", {})
+    if not isinstance(jobs, dict):
+        jobs = monitor["jobs"] = {}
+    status = jobs.setdefault(job, {})
+    if not isinstance(status, dict):
+        status = jobs[job] = {}
+    status[f"last_successful_{event}_at"] = datetime.now(timezone.utc).isoformat()
+    _write_snapshot(path, monitor)
+
+
 class Application:
     def __init__(self, settings: Settings, upload=True):
         self.settings, self.upload = settings, upload
@@ -91,7 +111,10 @@ class Application:
                 self.settings.request_timeout,
                 self.settings.request_delay,
             ).scrape(previous=previous)
-            gist_id, filename = self.settings.drops_gist_id, self.settings.drops_gist_filename
+            gist_id, filename = (
+                self.settings.drops_gist_id,
+                self.settings.drops_gist_filename,
+            )
         elif job == "badges":
             token = self.settings.twitch_oauth_token
             if not token:
@@ -111,12 +134,20 @@ class Application:
                 token,
                 self.settings.request_timeout,
             ).scrape()
-            gist_id, filename = self.settings.badges_gist_id, self.settings.badges_gist_filename
+            gist_id, filename = (
+                self.settings.badges_gist_id,
+                self.settings.badges_gist_filename,
+            )
         else:
             raise ValueError(f"unknown job: {job}")
         _write_snapshot(self.settings.output_dir / filename, data)
+        monitor_path = self.settings.output_dir / MONITOR_FILENAME
+        _record_success(monitor_path, job, "scrape")
         if self.upload:
-            GistPublisher(self.settings.github_token, self.session, self.settings.request_timeout).publish(gist_id, filename, data)
+            GistPublisher(
+                self.settings.github_token, self.session, self.settings.request_timeout
+            ).publish(gist_id, filename, data)
+            _record_success(monitor_path, job, "upload")
             LOG.info("Published %s to Gist %s", job, gist_id)
         LOG.info("Completed %s scrape", job)
         return data
@@ -136,8 +167,15 @@ class Application:
         for signum in (signal.SIGTERM, signal.SIGINT):
             signal.signal(signum, lambda _signum, _frame: stop.set())
         deadlines = {"drops": 0.0, "badges": 0.0}
-        intervals = {"drops": self.settings.drops_interval, "badges": self.settings.badges_interval}
-        LOG.info("Scheduler started (drops=%ss, badges=%ss)", intervals["drops"], intervals["badges"])
+        intervals = {
+            "drops": self.settings.drops_interval,
+            "badges": self.settings.badges_interval,
+        }
+        LOG.info(
+            "Scheduler started (drops=%ss, badges=%ss)",
+            intervals["drops"],
+            intervals["badges"],
+        )
         while not stop.is_set():
             now = time.monotonic()
             for job in ("drops", "badges"):
@@ -146,11 +184,11 @@ class Application:
                 try:
                     self.run_job(job)
                 except Exception:
-                    LOG.exception("%s scrape failed; retaining the previous snapshot/Gist", job)
+                    LOG.exception(
+                        "%s scrape failed; retaining the previous snapshot/Gist", job
+                    )
                 deadlines[job] = time.monotonic() + intervals[job]
-                LOG.debug(
-                    "Next %s scrape scheduled in %ss", job, intervals[job]
-                )
+                LOG.debug("Next %s scrape scheduled in %ss", job, intervals[job])
             wait = max(0.0, min(deadlines.values()) - time.monotonic())
             LOG.debug("Scheduler waiting up to %.1fs", min(wait, 60.0))
             stop.wait(min(wait, 60.0))

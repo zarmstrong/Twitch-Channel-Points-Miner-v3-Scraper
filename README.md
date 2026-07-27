@@ -7,6 +7,14 @@ A small container service that publishes two machine-readable JSON catalogs:
 
 Each successful job first writes an atomic snapshot under `/data`, then updates its configured GitHub Gist. Failed jobs are logged and leave the prior snapshot and Gist intact. The two schedules are independent and run immediately when the container starts.
 
+The service also maintains `/data/scraper-monitor.json`. It records separate
+UTC ISO 8601 `last_successful_scrape_at` and `last_successful_upload_at`
+timestamps for the Drops and badges jobs. A scrape timestamp advances after
+the local snapshot is written, while an upload timestamp advances only after
+GitHub accepts the Gist update. This makes the file suitable for an external
+health monitor and keeps the last known success visible after failures or
+container restarts.
+
 On each Drops run, the scraper always fetches the TwitchDrops.app front page,
 then compares every indexed game object with the previous local JSON snapshot.
 Unchanged games reuse their stored per-game reports; only new games, changed
@@ -206,6 +214,25 @@ python -m twitch_miner_scraper run
 ## Output contract
 
 Both documents have `version`, `generated_at`, `source`, and `counts` fields. Drops output includes the TwitchDrops.app front-page index and per-game campaign/drop reports. Badge output retains the complete Helix badge-set response under `sets`. Consumers should reject unsupported major `version` values and may use the previous Gist revision if a publisher run fails.
+
+The monitor document has this shape (timestamps appear after their respective
+events have succeeded):
+
+```json
+{
+  "version": 1,
+  "jobs": {
+    "drops": {
+      "last_successful_scrape_at": "2026-07-27T12:00:00+00:00",
+      "last_successful_upload_at": "2026-07-27T12:00:01+00:00"
+    },
+    "badges": {
+      "last_successful_scrape_at": "2026-07-27T12:00:02+00:00",
+      "last_successful_upload_at": "2026-07-27T12:00:03+00:00"
+    }
+  }
+}
+```
 
 ## Tests
 
