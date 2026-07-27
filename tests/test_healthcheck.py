@@ -136,6 +136,20 @@ def test_healthcheck_reports_non_utf8_monitor(tmp_path, healthchecks_server):
     assert "monitor file is not valid UTF-8" in requests[0][1]
 
 
+def test_healthcheck_reports_deeply_nested_monitor(tmp_path, healthchecks_server):
+    url, requests = healthchecks_server
+    content = "[" * 10000 + "]" * 10000
+    monitor_path = tmp_path / "scraper-monitor.json"
+    monitor_path.write_text(content, encoding="utf-8")
+
+    result = run_healthcheck(tmp_path, None, url)
+
+    assert result.returncode == 1
+    assert "monitor file JSON nesting is too deep" in result.stderr
+    assert requests[0][0] == "/ping-id/fail"
+    assert "monitor file JSON nesting is too deep" in requests[0][1]
+
+
 def test_healthcheck_requires_ping_url(tmp_path):
     result = run_healthcheck(
         tmp_path,

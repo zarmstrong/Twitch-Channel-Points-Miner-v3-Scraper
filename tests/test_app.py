@@ -63,6 +63,16 @@ def test_record_success_does_not_replace_non_utf8_monitor(tmp_path):
     assert monitor_path.read_bytes() == content
 
 
+def test_record_success_does_not_replace_deeply_nested_monitor(tmp_path):
+    monitor_path = tmp_path / "scraper-monitor.json"
+    content = "[" * 10000 + "]" * 10000
+    monitor_path.write_text(content, encoding="utf-8")
+
+    assert _record_success(monitor_path, "drops", "scrape") is False
+
+    assert monitor_path.read_text(encoding="utf-8") == content
+
+
 def test_record_success_does_not_replace_unreadable_monitor(monkeypatch, tmp_path):
     monitor_path = tmp_path / "scraper-monitor.json"
 

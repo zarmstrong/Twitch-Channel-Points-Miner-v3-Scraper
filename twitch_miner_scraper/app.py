@@ -84,6 +84,9 @@ def _record_success(path: Path, job: str, event: str) -> bool:
     except json.JSONDecodeError as error:
         LOG.warning("Unable to parse monitor file %s: %s", path, error)
         return False
+    except RecursionError:
+        LOG.warning("Monitor file JSON nesting is too deep: %s", path)
+        return False
     if not isinstance(monitor, dict) or monitor.get("version") != 1:
         LOG.warning("Refusing to replace incompatible monitor file at %s", path)
         return False

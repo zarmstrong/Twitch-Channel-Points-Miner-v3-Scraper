@@ -102,6 +102,8 @@ def check() -> str:
         raise ValueError(f"monitor file is not valid UTF-8: {path}") from None
     except json.JSONDecodeError:
         raise ValueError(f"monitor file is not valid JSON: {path}") from None
+    except RecursionError:
+        raise ValueError(f"monitor file JSON nesting is too deep: {path}") from None
 
     if not isinstance(monitor, dict) or monitor.get("version") != 1:
         raise ValueError("monitor file has an unsupported schema version")
