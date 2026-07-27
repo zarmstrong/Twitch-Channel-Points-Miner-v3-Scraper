@@ -22,6 +22,21 @@ front-page objects, or games missing a stored report trigger game-page
 requests. Games removed from the front page are removed from the next catalog.
 The `scrape_stats` object reports fetched, reused, and removed game counts.
 
+## Table of contents
+
+- [Configuration](#configuration)
+  - [GitHub token permissions](#github-token-permissions)
+- [Build the image](#build-the-image)
+- [Docker Compose](#docker-compose)
+- [Run continuously](#run-continuously)
+- [One-off runs](#one-off-runs)
+- [Output contract](#output-contract)
+  - [Health check script](#health-check-script)
+    - [Schedule with systemd (recommended)](#schedule-with-systemd-recommended)
+    - [Schedule with cron (alternative)](#schedule-with-cron-alternative)
+- [Tests](#tests)
+- [Troubleshooting](#troubleshooting)
+
 ## Configuration
 
 The easiest setup is the interactive configuration wizard. It uses only the
