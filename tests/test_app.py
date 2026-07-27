@@ -53,6 +53,16 @@ def test_record_success_does_not_replace_invalid_monitor(tmp_path):
     assert not monitor_path.with_suffix(".json.tmp").exists()
 
 
+def test_record_success_does_not_replace_non_utf8_monitor(tmp_path):
+    monitor_path = tmp_path / "scraper-monitor.json"
+    content = b"\xff\xfe"
+    monitor_path.write_bytes(content)
+
+    assert _record_success(monitor_path, "drops", "scrape") is False
+
+    assert monitor_path.read_bytes() == content
+
+
 def test_record_success_does_not_replace_unreadable_monitor(monkeypatch, tmp_path):
     monitor_path = tmp_path / "scraper-monitor.json"
 

@@ -78,6 +78,9 @@ def _record_success(path: Path, job: str, event: str) -> bool:
     except OSError as error:
         LOG.warning("Unable to read monitor file %s: %s", path, error)
         return False
+    except UnicodeDecodeError as error:
+        LOG.warning("Monitor file is not valid UTF-8 %s: %s", path, error)
+        return False
     except json.JSONDecodeError as error:
         LOG.warning("Unable to parse monitor file %s: %s", path, error)
         return False

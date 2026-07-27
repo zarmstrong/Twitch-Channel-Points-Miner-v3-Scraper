@@ -39,7 +39,9 @@ def healthchecks_server():
 
 def run_healthcheck(tmp_path, monitor, healthchecks_url, **environment):
     monitor_path = tmp_path / "scraper-monitor.json"
-    if monitor is not None:
+    if isinstance(monitor, bytes):
+        monitor_path.write_bytes(monitor)
+    elif monitor is not None:
         monitor_path.write_text(json.dumps(monitor), encoding="utf-8")
     env = os.environ.copy()
     env.update(
@@ -122,6 +124,16 @@ def test_healthcheck_reports_missing_monitor(tmp_path, healthchecks_server):
     assert result.returncode == 1
     assert "monitor file does not exist" in result.stderr
     assert requests[0][0] == "/ping-id/fail"
+
+
+def test_healthcheck_reports_non_utf8_monitor(tmp_path, healthchecks_server):
+    url, requests = healthchecks_server
+    result = run_healthcheck(tmp_path, b"\xff\xfe", url)
+
+    assert result.returncode == 1
+    assert "monitor file is not valid UTF-8" in result.stderr
+    assert requests[0][0] == "/ping-id/fail"
+    assert "monitor file is not valid UTF-8" in requests[0][1]
 
 
 def test_healthcheck_requires_ping_url(tmp_path):

@@ -98,6 +98,8 @@ def check() -> str:
         raise ValueError(f"monitor file does not exist: {path}") from None
     except OSError as error:
         raise ValueError(f"cannot read monitor file {path}: {error}") from None
+    except UnicodeDecodeError:
+        raise ValueError(f"monitor file is not valid UTF-8: {path}") from None
     except json.JSONDecodeError:
         raise ValueError(f"monitor file is not valid JSON: {path}") from None
 
