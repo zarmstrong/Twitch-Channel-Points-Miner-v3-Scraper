@@ -8,6 +8,7 @@ import os
 import signal
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .auth import TOKEN_CACHE_FILENAME, TwitchTokenManager
@@ -18,6 +19,7 @@ from .gist import GistPublisher
 from .http import build_session
 
 LOG = logging.getLogger(__name__)
+MONITOR_FILENAME = "scraper-monitor.json"
 
 
 def _verify_output_dir(path: Path) -> None:
@@ -65,6 +67,50 @@ def _load_snapshot(path: Path) -> dict | None:
     return data
 
 
+def _record_success(path: Path, job: str, event: str) -> bool:
+    """Best-effort recording of a successful scrape or upload for one job."""
+    if event not in {"scrape", "upload"}:
+        raise ValueError(f"unknown success event: {event}")
+    try:
+        monitor = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        monitor = {"version": 1, "jobs": {}}
+    except OSError as error:
+        LOG.warning("Unable to read monitor file %s: %s", path, error)
+        return False
+    except UnicodeDecodeError as error:
+        LOG.warning("Monitor file is not valid UTF-8 %s: %s", path, error)
+        return False
+    except json.JSONDecodeError as error:
+        LOG.warning("Unable to parse monitor file %s: %s", path, error)
+        return False
+    except RecursionError:
+        LOG.warning("Monitor file JSON nesting is too deep: %s", path)
+        return False
+    if not isinstance(monitor, dict) or monitor.get("version") != 1:
+        LOG.warning("Refusing to replace incompatible monitor file at %s", path)
+        return False
+    jobs = monitor.get("jobs")
+    if jobs is None:
+        jobs = monitor["jobs"] = {}
+    if not isinstance(jobs, dict):
+        LOG.warning("Refusing to replace malformed monitor file at %s", path)
+        return False
+    status = jobs.get(job)
+    if status is None:
+        status = jobs[job] = {}
+    if not isinstance(status, dict):
+        LOG.warning("Refusing to replace malformed %s monitor status", job)
+        return False
+    status[f"last_successful_{event}_at"] = datetime.now(timezone.utc).isoformat()
+    try:
+        _write_snapshot(path, monitor)
+    except OSError as error:
+        LOG.warning("Unable to update monitor file %s: %s", path, error)
+        return False
+    return True
+
+
 class Application:
     def __init__(self, settings: Settings, upload=True):
         self.settings, self.upload = settings, upload
@@ -91,7 +137,10 @@ class Application:
                 self.settings.request_timeout,
                 self.settings.request_delay,
             ).scrape(previous=previous)
-            gist_id, filename = self.settings.drops_gist_id, self.settings.drops_gist_filename
+            gist_id, filename = (
+                self.settings.drops_gist_id,
+                self.settings.drops_gist_filename,
+            )
         elif job == "badges":
             token = self.settings.twitch_oauth_token
             if not token:
@@ -111,12 +160,20 @@ class Application:
                 token,
                 self.settings.request_timeout,
             ).scrape()
-            gist_id, filename = self.settings.badges_gist_id, self.settings.badges_gist_filename
+            gist_id, filename = (
+                self.settings.badges_gist_id,
+                self.settings.badges_gist_filename,
+            )
         else:
             raise ValueError(f"unknown job: {job}")
         _write_snapshot(self.settings.output_dir / filename, data)
+        monitor_path = self.settings.output_dir / MONITOR_FILENAME
+        _record_success(monitor_path, job, "scrape")
         if self.upload:
-            GistPublisher(self.settings.github_token, self.session, self.settings.request_timeout).publish(gist_id, filename, data)
+            GistPublisher(
+                self.settings.github_token, self.session, self.settings.request_timeout
+            ).publish(gist_id, filename, data)
+            _record_success(monitor_path, job, "upload")
             LOG.info("Published %s to Gist %s", job, gist_id)
         LOG.info("Completed %s scrape", job)
         return data
@@ -128,7 +185,7 @@ class Application:
                 self.run_job(job)
             except Exception:
                 success = False
-                LOG.exception("%s scrape failed", job)
+                LOG.exception("%s job failed", job)
         return success
 
     def serve(self) -> None:
@@ -136,8 +193,15 @@ class Application:
         for signum in (signal.SIGTERM, signal.SIGINT):
             signal.signal(signum, lambda _signum, _frame: stop.set())
         deadlines = {"drops": 0.0, "badges": 0.0}
-        intervals = {"drops": self.settings.drops_interval, "badges": self.settings.badges_interval}
-        LOG.info("Scheduler started (drops=%ss, badges=%ss)", intervals["drops"], intervals["badges"])
+        intervals = {
+            "drops": self.settings.drops_interval,
+            "badges": self.settings.badges_interval,
+        }
+        LOG.info(
+            "Scheduler started (drops=%ss, badges=%ss)",
+            intervals["drops"],
+            intervals["badges"],
+        )
         while not stop.is_set():
             now = time.monotonic()
             for job in ("drops", "badges"):
@@ -146,11 +210,12 @@ class Application:
                 try:
                     self.run_job(job)
                 except Exception:
-                    LOG.exception("%s scrape failed; retaining the previous snapshot/Gist", job)
+                    LOG.exception(
+                        "%s job failed; local snapshot or Gist may already be updated",
+                        job,
+                    )
                 deadlines[job] = time.monotonic() + intervals[job]
-                LOG.debug(
-                    "Next %s scrape scheduled in %ss", job, intervals[job]
-                )
+                LOG.debug("Next %s scrape scheduled in %ss", job, intervals[job])
             wait = max(0.0, min(deadlines.values()) - time.monotonic())
             LOG.debug("Scheduler waiting up to %.1fs", min(wait, 60.0))
             stop.wait(min(wait, 60.0))
