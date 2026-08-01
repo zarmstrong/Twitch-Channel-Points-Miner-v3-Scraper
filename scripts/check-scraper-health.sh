@@ -70,7 +70,10 @@ def ping(url: str, message: str, failed: bool) -> None:
     request = Request(
         ping_url(url, failed),
         data=(message + "\n").encode(),
-        headers={"Content-Type": "text/plain; charset=utf-8"},
+        headers={
+            "Content-Type": "text/plain; charset=utf-8",
+            "User-Agent": "twitch-miner-scraper-healthcheck/1.0",
+        },
         method="POST",
     )
     try:

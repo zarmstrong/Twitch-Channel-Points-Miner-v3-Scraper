@@ -19,7 +19,13 @@ def healthchecks_server():
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             length = int(self.headers.get("Content-Length", "0"))
-            requests.append((self.path, self.rfile.read(length).decode()))
+            requests.append(
+                (
+                    self.path,
+                    self.rfile.read(length).decode(),
+                    self.headers.get("User-Agent"),
+                )
+            )
             self.send_response(200)
             self.end_headers()
 
@@ -86,6 +92,7 @@ def test_healthcheck_reports_fresh_jobs_as_healthy(tmp_path, healthchecks_server
     assert "badges(scrape=" in result.stdout
     assert requests[0][0] == "/ping-id"
     assert requests[0][1].startswith("healthy: drops(scrape=")
+    assert requests[0][2] == "twitch-miner-scraper-healthcheck/1.0"
 
 
 def test_healthcheck_reports_stale_job_as_unhealthy(tmp_path, healthchecks_server):
