@@ -104,6 +104,7 @@ def test_healthcheck_reports_stale_job_as_unhealthy(tmp_path, healthchecks_serve
     assert "unhealthy: drops scrape is stale" in result.stderr
     assert requests[0][0] == "/ping-id/fail"
     assert requests[0][1].startswith("unhealthy: drops scrape is stale")
+    assert requests[0][2] == "twitch-miner-scraper-healthcheck/1.0"
 
 
 def test_healthcheck_can_ignore_uploads_for_no_upload_runs(
