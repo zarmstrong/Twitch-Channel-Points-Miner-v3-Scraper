@@ -79,9 +79,8 @@ GAME_PAGE = """
 """
 
 
-def previous_catalog(drop_count=1):
+def previous_catalog():
     game = parse_front_page(FRONT_PAGE)[0]
-    game["drop_count"] = drop_count
     return {
         "version": 1,
         "indexed_games": [game],
@@ -111,8 +110,10 @@ def test_drops_reuses_unchanged_game_report():
 
 
 def test_drops_fetches_changed_game_object():
+    previous = previous_catalog()
+    previous["indexed_games"][0]["ends_at"] = "changed"
     session = SequenceSession([FRONT_PAGE, GAME_PAGE])
-    report = DropsScraper(session, request_delay=0).scrape(previous_catalog(drop_count=2))
+    report = DropsScraper(session, request_delay=0).scrape(previous)
     assert len(session.urls) == 2
     assert report["games"][0]["drops"][0]["name"] == "Hat"
     assert report["scrape_stats"]["fetched_games"] == 1
