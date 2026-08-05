@@ -192,7 +192,17 @@ class DropsScraper:
         for index, game in enumerate(indexed):
             prior_game = previous_index.get(game.get("slug"))
             prior_report = previous_reports.get(game.get("url"))
-            if prior_game == game and prior_report is not None:
+            indexed_drop_count = game.get("drop_count")
+            report_drop_count = (
+                prior_report.get("drop_count")
+                if isinstance(prior_report, dict)
+                else None
+            )
+            report_matches_index = (
+                indexed_drop_count is None
+                or report_drop_count == indexed_drop_count
+            )
+            if prior_game == game and prior_report is not None and report_matches_index:
                 reports.append(prior_report)
                 reused += 1
                 LOG.debug(
@@ -202,6 +212,14 @@ class DropsScraper:
                     game.get("slug"),
                 )
                 continue
+            if prior_game == game and prior_report is not None:
+                LOG.info(
+                    "Refetching inconsistent game report: slug=%s indexed_drops=%s "
+                    "reported_drops=%s",
+                    game.get("slug"),
+                    indexed_drop_count,
+                    report_drop_count,
+                )
             if fetched and self.request_delay:
                 LOG.debug("Waiting %ss before the next game request", self.request_delay)
                 time.sleep(self.request_delay)
