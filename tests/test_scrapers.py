@@ -1,3 +1,5 @@
+import pytest
+
 from twitch_miner_scraper.badges import BadgeScraper
 from twitch_miner_scraper.drops import DropsScraper, parse_front_page, parse_game_page
 
@@ -131,3 +133,21 @@ def test_drops_refetches_report_when_drop_count_disagrees_with_index():
     assert report["games"][0]["drops"][0]["name"] == "Hat"
     assert report["scrape_stats"]["fetched_games"] == 1
     assert report["scrape_stats"]["reused_games"] == 0
+
+
+def test_drops_refuses_an_empty_index_when_the_previous_catalog_had_games():
+    session = SequenceSession(["<html><body>No game cards</body></html>"])
+
+    with pytest.raises(ValueError, match="parsed 0 games"):
+        DropsScraper(session, request_delay=0).scrape(previous_catalog())
+
+    assert len(session.urls) == 1
+
+
+def test_drops_accepts_an_empty_index_without_a_previous_catalog():
+    session = SequenceSession(["<html><body>No game cards</body></html>"])
+
+    report = DropsScraper(session, request_delay=0).scrape(None)
+
+    assert report["games"] == []
+    assert report["counts"]["games"] == 0
