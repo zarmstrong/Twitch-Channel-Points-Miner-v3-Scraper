@@ -7,7 +7,8 @@ A small container service that publishes two machine-readable JSON catalogs:
 
 Each successful job first writes an atomic snapshot under `/data`, then updates
 its configured GitHub Gist. A scraping failure leaves the prior snapshot and
-Gist intact. If Gist publishing fails, the new local snapshot remains available
+Gist intact. A Drops run whose front page parses as zero games, while the
+previous snapshot had some, counts as a failure. If Gist publishing fails, the new local snapshot remains available
 while the Gist retains its prior content. The two schedules are independent and
 run immediately when the container starts.
 

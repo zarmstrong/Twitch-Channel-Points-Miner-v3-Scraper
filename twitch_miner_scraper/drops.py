@@ -176,6 +176,15 @@ class DropsScraper:
         indexed = parse_front_page(response.text)
         LOG.info("TwitchDrops.app index contains %d active/upcoming games", len(indexed))
         previous = previous if isinstance(previous, dict) else {}
+        previous_count = len(previous.get("indexed_games") or [])
+        if not indexed and previous_count:
+            # A markup change or an error page parses as zero games. Publishing
+            # that would replace a good catalog with an empty one, so fail the
+            # run and keep the previous snapshot and Gist instead.
+            raise ValueError(
+                "TwitchDrops.app index parsed 0 games while the previous "
+                f"catalog had {previous_count}; keeping the previous catalog"
+            )
         previous_index = {
             game.get("slug"): game
             for game in previous.get("indexed_games", [])
